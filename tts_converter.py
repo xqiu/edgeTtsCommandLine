@@ -396,6 +396,18 @@ def parse_args() -> argparse.Namespace:
         default="+0%",
         help="Optional speaking rate adjustment passed to edge-tts (e.g. '-10%')",
     )
+    parser.add_argument(
+        "--volume",
+        type=str,
+        default="+0%",
+        help="Optional volume adjustment passed to edge-tts (e.g. '+5%')",
+    )
+    parser.add_argument(
+        "--pitch",
+        type=str,
+        default="+0Hz",
+        help="Optional pitch adjustment passed to edge-tts (e.g. '+2Hz')",
+    )
     return parser.parse_args()
 
 
@@ -509,6 +521,8 @@ async def synthesize_segments(
     voice: str,
     temp_dir: str,
     rate: str | None = None,
+    volume: str | None = None,
+    pitch: str | None = None,
     max_retries: int = 5,
 ) -> List[str]:
     file_paths: List[str] = []
@@ -517,7 +531,13 @@ async def synthesize_segments(
         attempt = 0
         while attempt < max_retries:
             try:
-                communicate = edge_tts.Communicate(text, voice=voice, rate=rate)
+                communicate = edge_tts.Communicate(
+                    text,
+                    voice=voice,
+                    rate=rate,
+                    volume=volume,
+                    pitch=pitch,
+                )
                 await communicate.save(temp_file)
                 file_paths.append(temp_file)
                 break
@@ -628,7 +648,14 @@ def main() -> None:
                 raise ValueError("No captions found in the input SRT file")
             texts = [caption.text for caption in captions]
             audio_paths = asyncio.run(
-                synthesize_segments(texts=texts, voice=args.voice, temp_dir=temp_dir, rate=args.rate)
+                synthesize_segments(
+                    texts=texts,
+                    voice=args.voice,
+                    temp_dir=temp_dir,
+                    rate=args.rate,
+                    volume=args.volume,
+                    pitch=args.pitch,
+                )
             )
             if len(audio_paths) != len(texts):
                 raise RuntimeError("Failed to synthesize all SRT segments")
@@ -642,7 +669,14 @@ def main() -> None:
             if not texts:
                 raise ValueError("The input text file does not contain any lines to synthesize")
             audio_paths = asyncio.run(
-                synthesize_segments(texts=texts, voice=args.voice, temp_dir=temp_dir, rate=args.rate)
+                synthesize_segments(
+                    texts=texts,
+                    voice=args.voice,
+                    temp_dir=temp_dir,
+                    rate=args.rate,
+                    volume=args.volume,
+                    pitch=args.pitch,
+                )
             )
             if len(audio_paths) != len(texts):
                 raise RuntimeError("Failed to synthesize all text lines")

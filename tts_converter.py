@@ -14,7 +14,7 @@ import os
 import string
 from dataclasses import dataclass
 from tempfile import TemporaryDirectory
-from typing import Iterable, List, Sequence, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 import edge_tts
 from pydub import AudioSegment
@@ -536,20 +536,28 @@ def build_audio_from_segments(
     texts: Sequence[str],
     generate_srt: bool,
 ) -> Tuple[AudioSegment, List[Tuple[int, int, str]]]:
-    combined = AudioSegment.silent(duration=0)
+    combined: Optional[AudioSegment] = None
     timeline = 0
     srt_entries: List[Tuple[int, int, str]] = []
     for idx, (path, text) in enumerate(zip(audio_paths, texts)):
         segment_audio = AudioSegment.from_file(path)
         start = timeline
         end = start + len(segment_audio)
-        combined += segment_audio
+        if combined is None:
+            combined = segment_audio
+        else:
+            combined += segment_audio
         if generate_srt:
             srt_entries.append((start, end, text))
         timeline = end
         if idx < len(audio_paths) - 1 and silence_duration > 0:
-            combined += AudioSegment.silent(duration=silence_duration)
+            silence_segment = AudioSegment.silent(
+                duration=silence_duration, frame_rate=combined.frame_rate
+            )
+            combined += silence_segment
             timeline += silence_duration
+    if combined is None:
+        combined = AudioSegment.silent(duration=0)
     return combined, srt_entries
 
 
@@ -558,7 +566,7 @@ def build_audio_from_captions(
     audio_paths: Sequence[str],
     silence_duration: int,
 ) -> AudioSegment:
-    combined = AudioSegment.silent(duration=0)
+    combined: Optional[AudioSegment] = None
     timeline = 0
     for idx, (caption, path) in enumerate(zip(captions, audio_paths)):
         if idx == 0:
@@ -566,12 +574,24 @@ def build_audio_from_captions(
         else:
             desired_gap = max(0, caption.start_ms - timeline)
             gap = max(desired_gap, silence_duration)
-        if gap > 0:
-            combined += AudioSegment.silent(duration=gap)
-            timeline += gap
         segment_audio = AudioSegment.from_file(path)
-        combined += segment_audio
+        if gap > 0:
+            silence_frame_rate = (
+                segment_audio.frame_rate if combined is None else combined.frame_rate
+            )
+            silence_segment = AudioSegment.silent(duration=gap, frame_rate=silence_frame_rate)
+            if combined is None:
+                combined = silence_segment
+            else:
+                combined += silence_segment
+            timeline += gap
+        if combined is None:
+            combined = segment_audio
+        else:
+            combined += segment_audio
         timeline += len(segment_audio)
+    if combined is None:
+        combined = AudioSegment.silent(duration=0)
     return combined
 
 
